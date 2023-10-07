@@ -1,0 +1,133 @@
+From 403637c59198c3b5ad67679f6549874c418b85a7 Mon Sep 17 00:00:00 2001
+From: d-manas28 <dubey28.manas@gmail.com>
+Date: Sun, 8 Oct 2023 01:39:37 +0530
+Subject: [PATCH] modified code for task 3
+
+---
+ datafeed/test.csv      |  0
+ src/DataManipulator.ts | 34 +++++++++++++++++++++++-----------
+ src/Graph.tsx          | 30 +++++++++++++++++++-----------
+ 3 files changed, 42 insertions(+), 22 deletions(-)
+ create mode 100644 datafeed/test.csv
+
+diff --git a/datafeed/test.csv b/datafeed/test.csv
+new file mode 100644
+index 0000000..e69de29
+diff --git a/src/DataManipulator.ts b/src/DataManipulator.ts
+index 7f62295..e81d75d 100644
+--- a/src/DataManipulator.ts
++++ b/src/DataManipulator.ts
+@@ -1,20 +1,32 @@
+ import { ServerRespond } from './DataStreamer';
+-
++// updating the interface to sync with what we are receiving and send to render
+ export interface Row {
+-  stock: string,
+-  top_ask_price: number,
++  abc_price: number,
++  def_price: number,
++  ratio_of_prices: number,
+   timestamp: Date,
++  upper_bound_val: number,
++  lower_bound_val: number,
++  alert_val: number | undefined,
+ }
+ 
+ 
+ export class DataManipulator {
+-  static generateRow(serverResponds: ServerRespond[]) {
+-    return serverResponds.map((el: any) => {
+-      return {
+-        stock: el.stock,
+-        top_ask_price: el.top_ask && el.top_ask.price || 0,
+-        timestamp: el.timestamp,
+-      };
+-    })
++  static generateRow(serverRespond: ServerRespond[]): Row {
++    const ABCprice = (serverRespond[0].top_ask.price + serverRespond[0].top_bid.price) / 2;
++    const DEFprice = (serverRespond[1].top_ask.price + serverRespond[1].top_bid.price) / 2;
++    const ratio = ABCprice / DEFprice;
++    const upperBound = 1 + 0.05;
++    const lowerBound = 1 - 0.05;
++    return {
++      abc_price  : ABCprice,
++      def_price  : DEFprice,
++      ratio_of_prices:ratio,
++      timestamp: serverRespond[0].timestamp > serverRespond[1].timestamp ?
++        serverRespond[0].timestamp : serverRespond[1].timestamp,
++        upper_bound_val: upperBound,
++        lower_bound_val: lowerBound,
++        alert_val: (ratio > upperBound || ratio < lowerBound) ? ratio : undefined,
++    };
+   }
+ }
+diff --git a/src/Graph.tsx b/src/Graph.tsx
+index 277797d..130a045 100644
+--- a/src/Graph.tsx
++++ b/src/Graph.tsx
+@@ -1,5 +1,5 @@
+ import React, { Component } from 'react';
+-import { Table } from '@finos/perspective';
++import { Table, TableData } from '@finos/perspective';
+ import { ServerRespond } from './DataStreamer';
+ import { DataManipulator } from './DataManipulator';
+ import './Graph.css';
+@@ -22,11 +22,16 @@ class Graph extends Component<IProps, {}> {
+     // Get element from the DOM.
+     const elem = document.getElementsByTagName('perspective-viewer')[0] as unknown as PerspectiveViewerElement;
+ 
++
++    // We need to update schema in order to get new graph interface
+     const schema = {
+-      stock: 'string',
+-      top_ask_price: 'float',
+-      top_bid_price: 'float',
++      abc_price:'float',
++      def_price:'float',
++      ratio_of_prices:'float',
+       timestamp: 'date',
++      upper_bound_val:'float',
++      lower_bound_val:'float',
++      alert_val:'float',
+     };
+ 
+     if (window.perspective && window.perspective.worker()) {
+@@ -34,25 +39,28 @@ class Graph extends Component<IProps, {}> {
+     }
+     if (this.table) {
+       // Load the `table` in the `<perspective-viewer>` DOM reference.
++      // we need to make changes in the element attributes as well
+       elem.load(this.table);
+       elem.setAttribute('view', 'y_line');
+-      elem.setAttribute('column-pivots', '["stock"]');
+       elem.setAttribute('row-pivots', '["timestamp"]');
+-      elem.setAttribute('columns', '["top_ask_price"]');
++      elem.setAttribute('columns', '["ratio_of_prices","upper_bound_val","lower_bound_val","alert_val"]');
+       elem.setAttribute('aggregates', JSON.stringify({
+-        stock: 'distinctcount',
+-        top_ask_price: 'avg',
+-        top_bid_price: 'avg',
++        abc_price:'avg',
++        def_price:'avg',
++        ratio_of_prices:'avg',
+         timestamp: 'distinct count',
++        upper_bound_val:'avg',
++        lower_bound_val:'avg',
++        alert_val:'avg',
+       }));
+     }
+   }
+ 
+   componentDidUpdate() {
+     if (this.table) {
+-      this.table.update(
++      this.table.update([
+         DataManipulator.generateRow(this.props.data),
+-      );
++      ] as unknown as TableData);
+     }
+   }
+ }
+-- 
+2.42.0.windows.2
+
